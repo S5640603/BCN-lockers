@@ -41,7 +41,7 @@
       lockers.forEach(locker => {
         const el = document.createElement('div');
         el.className = 'locker-marker';
-        el.innerHTML = '🔒';
+        el.innerHTML = '📍';
         
         new mapboxgl.Marker(el)
           .setLngLat([locker.lng, locker.lat])

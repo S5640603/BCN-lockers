@@ -11,7 +11,7 @@
       font-size: 24px;
       color: #EA4335;
       text-shadow: 0 0 3px white;
-      transform: translate(-50%, -100%); /* Allinea correttamente il marker */
+      transform: translate(-50%, -100%); /* Posizionamento preciso */
     }
   </style>
 </head>
@@ -27,7 +27,7 @@
       zoom: 12
     });
 
-    // Aggiungi marker DOPO il caricamento
+    // Aggiungi marker SOLO dopo il caricamento
     map.on('load', () => {
       const lockers = [
         { id: 1, name: "BCN Airport", lng: 2.0833, lat: 41.2974 },
@@ -41,12 +41,12 @@
       lockers.forEach(locker => {
         const el = document.createElement('div');
         el.className = 'locker-marker';
-        el.innerHTML = '🔒';
+        el.innerHTML = '📍';
         
         new mapboxgl.Marker(el)
           .setLngLat([locker.lng, locker.lat])
           .setPopup(new mapboxgl.Popup().setHTML(`
-            <h3 style="margin:0;color:#4285F4">${locker.name}</h3>
+            <h3 style="color:#4285F4">${locker.name}</h3>
             <p>ID: ${locker.id}</p>
           `))
           .addTo(map);

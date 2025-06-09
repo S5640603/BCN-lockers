@@ -9,10 +9,8 @@
   <style>
     #map { position: fixed; top: 0; bottom: 0; width: 100%; }
     .marker {
-      background-image: url('https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Emoji_u1f511.svg/32px-Emoji_u1f511.svg.png');
-      background-size: cover;
-      width: 32px;
-      height: 32px;
+      font-size: 24px;
+      text-align: center;
       cursor: pointer;
     }
     .arrival-alert {
@@ -32,69 +30,114 @@
 <body>
   <div id="map"></div>
   <div id="arrivalAlert" class="arrival-alert">
-    <h3>Sei arrivato!</h3>
-    <p id="otpDisplay">Codice: 123456</p>
+    <h3>🔑 You have arrived!</h3>
+    <p id="otpDisplay">Your code: 123456</p>
   </div>
 
   <script>
+    // 1. MAP INITIALIZATION
     mapboxgl.accessToken = 'pk.eyJ1IjoiZW1hbnVsZWxlIiwiYSI6ImNtYm81ZnQzNTE0czkyanF5OXE4YmRnZ3oifQ.suw4swpVFR1lqHa_-50-gA';
-
     const map = new mapboxgl.Map({
       container: 'map',
       style: 'mapbox://styles/mapbox/streets-v11',
-      center: [2.1686, 41.3874],
+      center: [2.1686, 41.3874], // Barcelona center
       zoom: 13
     });
 
+    // 2. LOCKER DATA - All 6 locations with key emoji
     const lockers = [
-      { id: "BCN_Airport", name: "Aeroporto BCN", coordinates: [2.0833, 41.2974] },
-      { id: "Barcelona_Sants", name: "Stazione Sants", coordinates: [2.1406, 41.3796] },
-      { id: "Estacio_Franca", name: "Estació de França", coordinates: [2.1836, 41.3850] },
-      { id: "Passeig_Gracia", name: "Passeig de Gràcia", coordinates: [2.1657, 41.3919] },
-      { id: "Clot_Arago", name: "Clot-Aragó", coordinates: [2.1864, 41.4106] },
-      { id: "Barcelona_Nord", name: "Barcelona Nord", coordinates: [2.1814, 41.3936] }
+      { 
+        id: "BCN_Airport", 
+        name: "🔑 BCN Airport", 
+        coordinates: [2.0833, 41.2974],
+        color: "#4CAF50" // Green for available
+      },
+      { 
+        id: "Barcelona_Sants", 
+        name: "🔑 Barcelona Sants", 
+        coordinates: [2.1406, 41.3796],
+        color: "#4CAF50"
+      },
+      { 
+        id: "Estacio_Franca", 
+        name: "🔑 Estació de França", 
+        coordinates: [2.1836, 41.3850],
+        color: "#4CAF50"
+      },
+      { 
+        id: "Passeig_Gracia", 
+        name: "🔑 Passeig de Gràcia", 
+        coordinates: [2.1657, 41.3919],
+        color: "#4CAF50"
+      },
+      { 
+        id: "Clot_Arago", 
+        name: "🔑 Clot-Àragó", 
+        coordinates: [2.1864, 41.4106],
+        color: "#4CAF50"
+      },
+      { 
+        id: "Barcelona_Nord", 
+        name: "🔑 Barcelona Nord", 
+        coordinates: [2.1814, 41.3936],
+        color: "#4CAF50"
+      }
     ];
 
+    // 3. GLOBAL VARIABLES
     let userMarker = null;
     let routeLayer = null;
     let checkInterval = null;
 
+    // 4. MAP LOAD EVENT - Create key emoji markers
     map.on('load', () => {
       lockers.forEach(locker => {
+        // Create marker element with key emoji
         const el = document.createElement('div');
         el.className = 'marker';
+        el.innerHTML = '🔑';
+        el.style.color = locker.color;
+        el.style.fontSize = '24px';
+        el.style.textShadow = '0 0 3px white';
+        
+        // Create popup with locker name
+        const popup = new mapboxgl.Popup({ offset: 25 })
+          .setHTML(`<b>${locker.name}</b>`);
 
         new mapboxgl.Marker(el)
           .setLngLat(locker.coordinates)
-          .setPopup(new mapboxgl.Popup({ offset: 25 }).setText(locker.name))
+          .setPopup(popup)
           .addTo(map);
 
+        // Click handler
         el.addEventListener('click', () => {
-          window.AppInventor?.setWebViewString?.(`locker_selected:${locker.id}`);
+          window.AppInventor.setWebViewString(`locker_selected|${locker.id}`);
         });
       });
     });
 
+    // 5. NAVIGATION FUNCTION (called from MIT App)
     window.startNavigation = (userLng, userLat, lockerId) => {
       const locker = lockers.find(l => l.id === lockerId);
       if (!locker) return;
 
+      // Clear previous elements
       if (userMarker) userMarker.remove();
-      if (routeLayer) {
-        map.removeLayer('route');
-        map.removeSource('route');
-      }
+      if (routeLayer) map.removeLayer('route').removeSource('route');
       if (checkInterval) clearInterval(checkInterval);
 
-      userMarker = new mapboxgl.Marker({ color: '#4CAF50' })
+      // Add user position marker (blue dot)
+      userMarker = new mapboxgl.Marker({ color: '#2196F3' })
         .setLngLat([userLng, userLat])
         .addTo(map);
 
+      // Get walking route from Mapbox
       fetch(`https://api.mapbox.com/directions/v5/mapbox/walking/${userLng},${userLat};${locker.coordinates[0]},${locker.coordinates[1]}?geometries=geojson&access_token=${mapboxgl.accessToken}`)
         .then(res => res.json())
         .then(data => {
           const route = data.routes[0].geometry;
 
+          // Add route to map
           map.addLayer({
             id: 'route',
             type: 'line',
@@ -108,42 +151,50 @@
             },
             paint: {
               'line-color': '#3b82f6',
-              'line-width': 4
+              'line-width': 4,
+              'line-opacity': 0.7
             }
           });
 
+          // Zoom to fit route
           const bounds = new mapboxgl.LngLatBounds();
           bounds.extend([userLng, userLat]);
           bounds.extend(locker.coordinates);
           map.fitBounds(bounds, { padding: 50 });
 
+          // Start tracking position
           startPositionTracking(locker.coordinates);
         });
     };
 
+    // 6. POSITION TRACKING
     function startPositionTracking(destination) {
       checkInterval = setInterval(() => {
         window.AppInventor.getLocation((lng, lat) => {
           if (!lng || !lat) return;
 
+          // Update user position
           userMarker.setLngLat([lng, lat]);
 
+          // Calculate distance to destination
           const distance = turf.distance(
             turf.point([lng, lat]),
             turf.point(destination),
             { units: 'kilometers' }
           );
 
+          // If within 50m, show OTP
           if (distance < 0.05) {
-            document.getElementById('otpDisplay').textContent = `Codice: ${window.currentOTP || '123456'}`;
+            document.getElementById('otpDisplay').textContent = `Your code: ${window.currentOTP || '123456'}`;
             document.getElementById('arrivalAlert').style.display = 'block';
             clearInterval(checkInterval);
-            window.AppInventor.setWebViewString('arrival:true');
+            window.AppInventor.setWebViewString('arrival|true');
           }
         });
-      }, 5000);
+      }, 5000); // Update every 5 seconds
     }
 
+    // 7. MIT APP COMMUNICATION
     window.Android = {
       notify: message => window.AppInventor.setWebViewString(message),
       setOTP: otp => { window.currentOTP = otp; }
@@ -151,4 +202,3 @@
   </script>
 </body>
 </html>
-

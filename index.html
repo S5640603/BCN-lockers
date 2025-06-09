@@ -1,106 +1,162 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Barcelona Lockers Navigation</title>
-  <!-- Mappa Mapbox -->
-  <script src="https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.js"></script>
-  <link href="https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.css" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StuPiso Lockers</title>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.js"></script>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.css" rel="stylesheet">
+  <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
   <style>
-    body, html, #map { 
-      margin: 0; 
-      padding: 0; 
-      width: 100%; 
-      height: 100%; 
+    #map { position: fixed; top: 0; bottom: 0; width: 100%; }
+    .marker {
+      background-image: url('https://i.imgur.com/WbMOfMl.png');
+      background-size: cover;
+      width: 30px;
+      height: 30px;
+      cursor: pointer;
     }
-    .locker-marker {
-      font-size: 24px;
-      color: #EA4335; /* Rosso Google */
-      text-shadow: 0 0 3px white;
-      transform: translate(-50%, -100%); /* Allineamento preciso */
+    .arrival-alert {
+      position: absolute;
+      bottom: 20px;
+      left: 10px;
+      right: 10px;
+      background: white;
+      padding: 10px;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      z-index: 100;
+      display: none;
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
+  <div id="arrivalAlert" class="arrival-alert">
+    <h3>You have arrived!</h3>
+    <p id="otpDisplay">Code: 123456</p>
+  </div>
 
   <script>
-    // 1. Inizializzazione mappa
-    mapboxgl.accessToken = 'pk.eyJ1IjoiZW1hbnVsZWxlIiwiYSI6ImNtYm81ZnQzNTE0czkyanF5OXE4YmRnZ3oifQ.suw4swpVFR1lqHa_-50-gA';
+    // 1. MAP INITIALIZATION
+    mapboxgl.accessToken = 'pk.eyJ1...YOUR_API_KEY...'; // Replace with your key
     const map = new mapboxgl.Map({
       container: 'map',
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: [2.1734, 41.3851], // Centro Barcellona
-      zoom: 12
+      style: 'mapbox://styles/mapbox/streets-v11',
+      center: [2.1686, 41.3874], // Barcelona center
+      zoom: 13
     });
 
-    // 2. Aggiungi marcatori armadietti
+    // 2. LOCKER DATA
     const lockers = [
-      { id: 1, name: "BCN Airport", coordinates: [2.0833, 41.2974] },
-      { id: 2, name: "Barcelona Sants", coordinates: [2.1406, 41.3796] },
-      { id: 3, name: "Estació de França", coordinates: [2.1836, 41.3850] },
-      { id: 4, name: "Passeig de Gràcia", coordinates: [2.1657, 41.3919] },
-      { id: 5, name: "Clot-Aragó", coordinates: [2.1864, 41.4106] },
-      { id: 6, name: "Barcelona Nord", coordinates: [2.1814, 41.3936] }
+      { 
+        id: "BCN_Airport", 
+        name: "BCN Airport", 
+        coordinates: [2.0833, 41.2974],
+        icon: "https://i.imgur.com/green_icon.png"
+      },
+      { 
+        id: "Sants", 
+        name: "Sants Station", 
+        coordinates: [2.1406, 41.3796],
+        icon: "https://i.imgur.com/green_icon.png"
+      }
     ];
 
+    // 3. GLOBAL VARIABLES
+    let userMarker = null;
+    let routeLayer = null;
+    let checkInterval = null;
+
+    // 4. MAP LOAD EVENT
     map.on('load', () => {
       lockers.forEach(locker => {
         const el = document.createElement('div');
-        el.className = 'locker-marker';
-        el.innerHTML = '🔒';
+        el.className = 'marker';
+        el.style.backgroundImage = `url(${locker.icon})`;
         
         new mapboxgl.Marker(el)
           .setLngLat(locker.coordinates)
-          .setPopup(new mapboxgl.Popup().setHTML(`
-            <h3 style="color:#4285F4">${locker.name}</h3>
-            <p>ID: ${locker.id}</p>
-          `))
+          .setPopup(new mapboxgl.Popup().setHTML(`<b>${locker.name}</b>`))
           .addTo(map);
+
+        el.addEventListener('click', () => {
+          window.AppInventor.setWebViewString(`locker_selected|${locker.id}`);
+        });
       });
     });
 
-    // 3. FUNZIONE ESSENZIALE per MIT App Inventor
-    window.drawRoute = (routeData) => {
-      try {
-        const data = JSON.parse(routeData);
-        
-        // Rimuovi percorso esistente
-        if (map.getSource('route')) {
-          map.removeLayer('route');
-          map.removeSource('route');
-        }
-        
-        // Aggiungi nuovo percorso
-        map.addLayer({
-          id: 'route',
-          type: 'line',
-          source: {
-            type: 'geojson',
-            data: data.routes[0].geometry
-          },
-          paint: {
-            'line-color': '#4285F4',
-            'line-width': 4,
-            'line-opacity': 0.7
-          }
-        });
-        
-        // Adatta la mappa al percorso
-        const bounds = new mapboxgl.LngLatBounds();
-        data.routes[0].geometry.coordinates.forEach(coord => {
-          bounds.extend(coord);
-        });
-        map.fitBounds(bounds, { padding: 50 });
+    // 5. NAVIGATION FUNCTION (called from MIT App)
+    window.startNavigation = (userLng, userLat, lockerId) => {
+      const locker = lockers.find(l => l.id === lockerId);
+      if (!locker) return;
 
-      } catch (error) {
-        console.error("Errore drawRoute:", error);
-      }
+      if (userMarker) userMarker.remove();
+      if (routeLayer) map.removeLayer('route').removeSource('route');
+      if (checkInterval) clearInterval(checkInterval);
+
+      userMarker = new mapboxgl.Marker({ color: '#4CAF50' })
+        .setLngLat([userLng, userLat])
+        .addTo(map);
+
+      fetch(`https://api.mapbox.com/directions/v5/mapbox/walking/${userLng},${userLat};${locker.coordinates[0]},${locker.coordinates[1]}?geometries=geojson&access_token=${mapboxgl.accessToken}`)
+        .then(res => res.json())
+        .then(data => {
+          const route = data.routes[0].geometry;
+
+          map.addLayer({
+            id: 'route',
+            type: 'line',
+            source: {
+              type: 'geojson',
+              data: {
+                type: 'Feature',
+                properties: {},
+                geometry: route
+              }
+            },
+            paint: {
+              'line-color': '#3b82f6',
+              'line-width': 4
+            }
+          });
+
+          const bounds = new mapboxgl.LngLatBounds();
+          bounds.extend([userLng, userLat]);
+          bounds.extend(locker.coordinates);
+          map.fitBounds(bounds, { padding: 50 });
+
+          startPositionTracking(locker.coordinates);
+        });
     };
 
-    // 4. Funzione per debug
-    window.showError = (message) => {
-      alert("Errore: " + message);
+    // 6. POSITION TRACKING
+    function startPositionTracking(destination) {
+      checkInterval = setInterval(() => {
+        window.AppInventor.getLocation((lng, lat) => {
+          if (!lng || !lat) return;
+
+          userMarker.setLngLat([lng, lat]);
+
+          const distance = turf.distance(
+            turf.point([lng, lat]),
+            turf.point(destination),
+            { units: 'kilometers' }
+          );
+
+          if (distance < 0.05) { // 50 meters
+            document.getElementById('otpDisplay').textContent = `Code: ${window.currentOTP || '123456'}`;
+            document.getElementById('arrivalAlert').style.display = 'block';
+            clearInterval(checkInterval);
+            window.AppInventor.setWebViewString('arrival|true');
+          }
+        });
+      }, 5000); // Check every 5 seconds
+    }
+
+    // 7. MIT APP COMMUNICATION
+    window.Android = {
+      notify: message => window.AppInventor.setWebViewString(message),
+      setOTP: otp => { window.currentOTP = otp; }
     };
   </script>
 </body>

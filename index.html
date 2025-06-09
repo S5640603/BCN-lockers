@@ -3,18 +3,16 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>StuPiso Lockers</title>
-  <!-- Mappa Mapbox -->
   <script src="https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.js"></script>
   <link href="https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.css" rel="stylesheet">
-  <!-- Libreria per calcoli geografici -->
   <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
   <style>
     #map { position: fixed; top: 0; bottom: 0; width: 100%; }
     .marker {
-      background-image: url('https://i.imgur.com/WbMOfMl.png');
+      background-image: url('https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Emoji_u1f511.svg/32px-Emoji_u1f511.svg.png');
       background-size: cover;
-      width: 30px;
-      height: 30px;
+      width: 32px;
+      height: 32px;
       cursor: pointer;
     }
     .arrival-alert {
@@ -39,79 +37,64 @@
   </div>
 
   <script>
-    // 1. INIZIALIZZAZIONE MAPPA
-    mapboxgl.accessToken = 'pk.eyJ1IjoiZW1hbnVsZWxlIiwiYSI6ImNtYm81ZnQzNTE0czkyanF5OXE4YmRnZ3oifQ.suw4swpVFR1lqHa_-50-gA'; // Sostituisci con la tua API key
+    mapboxgl.accessToken = 'pk.eyJ1IjoiZW1hbnVsZWxlIiwiYSI6ImNtYm81ZnQzNTE0czkyanF5OXE4YmRnZ3oifQ.suw4swpVFR1lqHa_-50-gA';
+
     const map = new mapboxgl.Map({
       container: 'map',
       style: 'mapbox://styles/mapbox/streets-v11',
-      center: [2.1686, 41.3874], // Centro di Barcellona
+      center: [2.1686, 41.3874],
       zoom: 13
     });
 
-    // 2. DATI DEI LOCKERS (hardcoded)
     const lockers = [
-      { 
-        id: "BCN_Airport", 
-        name: "Aeroporto BCN", 
-        coordinates: [2.0833, 41.2974],
-        icon: "https://i.imgur.com/green_icon.png" // Icona verde per disponibile
-      },
-      { 
-        id: "Sants", 
-        name: "Stazione Sants", 
-        coordinates: [2.1406, 41.3796],
-        icon: "https://i.imgur.com/green_icon.png"
-      }
+      { id: "BCN_Airport", name: "BCN Airport", coordinates: [2.0833, 41.2974] },
+      { id: "Barcelona_Sants", name: "Barcelona Sants", coordinates: [2.1406, 41.3796] },
+      { id: "Estacio_Franca", name: "Estació de França", coordinates: [2.1836, 41.3850] },
+      { id: "Passeig_Gracia", name: "Passeig de Gràcia", coordinates: [2.1657, 41.3919] },
+      { id: "Clot_Arago", name: "Clot-Aragó", coordinates: [2.1864, 41.4106] },
+      { id: "Barcelona_Nord", name: "Barcelona Nord", coordinates: [2.1814, 41.3936] }
     ];
 
-    // 3. VARIABILI GLOBALI
     let userMarker = null;
     let routeLayer = null;
     let checkInterval = null;
 
-    // 4. CARICAMENTO DELLA MAPPA
     map.on('load', () => {
-      // Aggiungi tutti i marker dei locker
       lockers.forEach(locker => {
         const el = document.createElement('div');
         el.className = 'marker';
-        el.style.backgroundImage = `url(${locker.icon})`;
-        
+
         new mapboxgl.Marker(el)
           .setLngLat(locker.coordinates)
           .setPopup(new mapboxgl.Popup().setHTML(`<b>${locker.name}</b>`))
           .addTo(map);
 
-        // Comunica con MIT App Inventor al click
         el.addEventListener('click', () => {
-          window.AppInventor.setWebViewString(`locker_selected:${locker.id}`);
+          window.AppInventor?.setWebViewString?.(`locker_selected:${locker.id}`);
         });
       });
     });
 
-    // 5. FUNZIONE PER LA NAVIGAZIONE (chiamata da MIT App Inventor)
     window.startNavigation = (userLng, userLat, lockerId) => {
-      // Trova il locker selezionato
       const locker = lockers.find(l => l.id === lockerId);
       if (!locker) return;
 
-      // Cancella elementi precedenti
       if (userMarker) userMarker.remove();
-      if (routeLayer) map.removeLayer('route').removeSource('route');
+      if (routeLayer) {
+        map.removeLayer('route');
+        map.removeSource('route');
+      }
       if (checkInterval) clearInterval(checkInterval);
 
-      // Aggiungi marker posizione utente
       userMarker = new mapboxgl.Marker({ color: '#4CAF50' })
         .setLngLat([userLng, userLat])
         .addTo(map);
 
-      // Calcola percorso
       fetch(`https://api.mapbox.com/directions/v5/mapbox/walking/${userLng},${userLat};${locker.coordinates[0]},${locker.coordinates[1]}?geometries=geojson&access_token=${mapboxgl.accessToken}`)
         .then(res => res.json())
         .then(data => {
           const route = data.routes[0].geometry;
 
-          // Aggiungi il percorso alla mappa
           map.addLayer({
             id: 'route',
             type: 'line',
@@ -129,34 +112,28 @@
             }
           });
 
-          // Centra la mappa sul percorso
           const bounds = new mapboxgl.LngLatBounds();
           bounds.extend([userLng, userLat]);
           bounds.extend(locker.coordinates);
           map.fitBounds(bounds, { padding: 50 });
 
-          // Avvia il tracciamento
           startPositionTracking(locker.coordinates);
         });
     };
 
-    // 6. TRACCIAMENTO POSIZIONE IN TEMPO REALE
     function startPositionTracking(destination) {
       checkInterval = setInterval(() => {
         window.AppInventor.getLocation((lng, lat) => {
           if (!lng || !lat) return;
 
-          // Aggiorna marker posizione utente
           userMarker.setLngLat([lng, lat]);
 
-          // Calcola distanza dall'arrivo
           const distance = turf.distance(
             turf.point([lng, lat]),
             turf.point(destination),
             { units: 'kilometers' }
           );
 
-          // Se entro 50 metri, mostra OTP
           if (distance < 0.05) {
             document.getElementById('otpDisplay').textContent = `Codice: ${window.currentOTP || '123456'}`;
             document.getElementById('arrivalAlert').style.display = 'block';
@@ -164,19 +141,13 @@
             window.AppInventor.setWebViewString('arrival:true');
           }
         });
-      }, 5000); // Controlla ogni 5 secondi
+      }, 5000);
     }
 
-    // 7. COMUNICAZIONE CON MIT APP INVENTOR
     window.Android = {
       notify: message => window.AppInventor.setWebViewString(message),
-      
-      setOTP: otp => {
-        window.currentOTP = otp;
-      }
+      setOTP: otp => { window.currentOTP = otp; }
     };
   </script>
-</body>
-</html>
 </body>
 </html>

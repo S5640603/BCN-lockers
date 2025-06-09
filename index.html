@@ -47,8 +47,8 @@
     });
 
     const lockers = [
-      { id: "BCN_Airport", name: "BCN Airport", coordinates: [2.0833, 41.2974] },
-      { id: "Barcelona_Sants", name: "Barcelona Sants", coordinates: [2.1406, 41.3796] },
+      { id: "BCN_Airport", name: "Aeroporto BCN", coordinates: [2.0833, 41.2974] },
+      { id: "Barcelona_Sants", name: "Stazione Sants", coordinates: [2.1406, 41.3796] },
       { id: "Estacio_Franca", name: "Estació de França", coordinates: [2.1836, 41.3850] },
       { id: "Passeig_Gracia", name: "Passeig de Gràcia", coordinates: [2.1657, 41.3919] },
       { id: "Clot_Arago", name: "Clot-Aragó", coordinates: [2.1864, 41.4106] },
@@ -66,7 +66,7 @@
 
         new mapboxgl.Marker(el)
           .setLngLat(locker.coordinates)
-          .setPopup(new mapboxgl.Popup().setHTML(`<b>${locker.name}</b>`))
+          .setPopup(new mapboxgl.Popup({ offset: 25 }).setText(locker.name))
           .addTo(map);
 
         el.addEventListener('click', () => {
@@ -151,3 +151,4 @@
   </script>
 </body>
 </html>
+
